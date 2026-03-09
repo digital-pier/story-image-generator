@@ -112,10 +112,17 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const details = toErrorDetails(error);
     const status = typeof details.status === "number" ? details.status : 500;
+    const maybeError = error as { message?: string; stack?: string };
 
     console.error("[api/generate] failed", {
       duration_ms: Date.now() - start,
       ...details
+    });
+    console.error("[api/generate] explicit error details", {
+      status,
+      details_json: JSON.stringify(details),
+      raw_message: maybeError.message,
+      raw_stack: maybeError.stack
     });
 
     return NextResponse.json(

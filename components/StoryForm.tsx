@@ -107,14 +107,24 @@ export default function StoryForm() {
       const payload = await response.json();
 
       if (!response.ok) {
+        console.error("[UI][generate] API error", {
+          status: response.status,
+          error: payload.error,
+          details: payload.details
+        });
         setError(payload.error || "Failed to generate story package.");
         setErrorDetails((payload.details as ProviderErrorDetails | undefined) || null);
         setResult(null);
         return;
       }
 
-      setResult(payload as StoryPackage);
+      const storyPackage = payload as StoryPackage;
+      if (storyPackage.warnings?.length) {
+        console.warn("[UI][generate] generation warnings", storyPackage.warnings);
+      }
+      setResult(storyPackage);
     } catch (err) {
+      console.error("[UI][generate] request failed before API error parsing", err);
       setError(err instanceof Error ? err.message : "Unexpected error occurred.");
       setErrorDetails(null);
       setResult(null);
