@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 700px at 10% -20%, rgba(99, 217, 255, 0.14), transparent 60%),
+    radial-gradient(900px 600px at 90% -10%, rgba(255, 122, 89, 0.12), transparent 60%),
+    linear-gradient(135deg, #05070d 0%, #06080f 48%, #0a101e 100%);
+  color: #e6ecff;
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}

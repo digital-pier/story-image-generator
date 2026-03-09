@@ -1,0 +1,47 @@
+{
+  "project_slug": "the-phone-under-stairwell-step-12",
+  "video_title": "The Phone Under Stairwell Step 12",
+  "target_minutes": 10,
+  "estimated_word_count": 1450,
+  "story_summary": "A tenant finds an abandoned phone that starts receiving voice notes from a version of himself warning that someone in the building has already replaced him.",
+  "full_story_script": "I found the phone under the twelfth step... (full script here)",
+  "narration_script": "I found the phone under the twelfth step. It was raining outside, and the stairwell smelled like wet concrete...",
+  "youtube_description": "I never planned to share this, but what happened in my building still keeps me awake...\n\nIf you want more anonymous confessions and suspense stories, subscribe and turn on notifications.",
+  "youtube_tags": [
+    "anonymous confession",
+    "horror story",
+    "suspense narration",
+    "faceless youtube",
+    "dark storytelling",
+    "creepy phone story",
+    "midnight confession",
+    "eerie mystery",
+    "scary true style story"
+  ],
+  "scenes": [
+    {
+      "scene_number": 1,
+      "scene_title": "The Find",
+      "story_text": "I noticed a cracked phone wedged under the stairwell step after midnight...",
+      "image_needed": true,
+      "image_prompt": "narrow apartment stairwell at night, cracked phone under concrete step, wet floor reflections, dim overhead bulb, distant shadow figure at landing, dark cinematic suspense, realistic, low saturation, moody lighting, no gore, no visible face",
+      "image_url": "https://example.com/generated-scene-1.png"
+    },
+    {
+      "scene_number": 2,
+      "scene_title": "First Voice Note",
+      "story_text": "The screen lit up with an unknown notification and a voice that sounded exactly like me...",
+      "image_needed": true,
+      "image_prompt": "close view of old phone screen glowing in dark room, notebook and keys on table, rain streaks on window, back-view silhouette in doorway, eerie realistic cinematic style, low saturation, no gore, no visible face",
+      "image_url": "https://example.com/generated-scene-2.png"
+    },
+    {
+      "scene_number": 3,
+      "scene_title": "The Basement Door",
+      "story_text": "The message said not to open the basement door, which was already unlocked...",
+      "image_needed": true,
+      "image_prompt": "apartment basement corridor, heavy metal door slightly open, flickering fluorescent light, long shadows, abandoned cleaning cart, suspenseful realistic atmosphere, low saturation, no gore, no visible face",
+      "image_url": "https://example.com/generated-scene-3.png"
+    }
+  ]
+}

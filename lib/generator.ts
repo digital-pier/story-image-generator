@@ -1,0 +1,262 @@
+import OpenAI from "openai";
+import { buildStoryPrompt } from "./prompts";
+import { StoryInput, StoryPackage, StoryScene } from "./types";
+import { calculateTargetWordCount, clamp, estimateSceneCount } from "./wordcount";
+
+function createSlug(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 72);
+}
+
+function cleanText(value: unknown, fallback = ""): string {
+  if (typeof value !== "string") return fallback;
+  return value.trim();
+}
+
+function cleanTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+
+  const normalized = tags
+    .map((tag) => (typeof tag === "string" ? tag.trim() : ""))
+    .filter(Boolean)
+    .slice(0, 20);
+
+  return Array.from(new Set(normalized));
+}
+
+function splitScriptIntoChunks(script: string, count: number): string[] {
+  const words = script.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return Array.from({ length: count }, () => "");
+
+  const chunkSize = Math.ceil(words.length / count);
+  const chunks: string[] = [];
+
+  for (let i = 0; i < count; i += 1) {
+    const start = i * chunkSize;
+    const end = start + chunkSize;
+    chunks.push(words.slice(start, end).join(" ").trim());
+  }
+
+  return chunks;
+}
+
+function sanitizeImagePrompt(prompt: string): string {
+  const withoutFaceMentions = prompt.replace(/\b(face|facial|portrait|close-up face)\b/gi, "obscured silhouette");
+  const styleSuffix = "dark cinematic suspense, realistic, low saturation, moody lighting, no gore, no visible face";
+  const base = withoutFaceMentions.trim();
+  return base.includes("no visible face") ? base : `${base}, ${styleSuffix}`;
+}
+
+function normalizeScenes(
+  scenes: unknown,
+  desiredCount: number,
+  fallbackScript: string
+): StoryScene[] {
+  const incoming = Array.isArray(scenes) ? scenes : [];
+
+  const parsed: StoryScene[] = incoming
+    .slice(0, 7)
+    .map((scene, index) => {
+      const candidate = scene as Partial<StoryScene>;
+      return {
+        scene_number: index + 1,
+        scene_title: cleanText(candidate.scene_title, `Scene ${index + 1}`),
+        story_text: cleanText(candidate.story_text),
+        image_needed: true,
+        image_prompt: sanitizeImagePrompt(
+          cleanText(
+            candidate.image_prompt,
+            "abandoned hallway with flickering light and distant shadow figure"
+          )
+        )
+      };
+    })
+    .filter((scene) => scene.story_text.length > 0);
+
+  const targetCount = clamp(desiredCount, 3, 7);
+
+  if (parsed.length >= targetCount) {
+    return parsed.slice(0, targetCount).map((scene, index) => ({
+      ...scene,
+      scene_number: index + 1
+    }));
+  }
+
+  const chunks = splitScriptIntoChunks(fallbackScript, targetCount);
+  const filled = [...parsed];
+
+  while (filled.length < targetCount) {
+    const index = filled.length;
+    filled.push({
+      scene_number: index + 1,
+      scene_title: `Scene ${index + 1}`,
+      story_text: chunks[index] || "",
+      image_needed: true,
+      image_prompt: sanitizeImagePrompt(
+        "lonely street at night, wet asphalt, distant back-view figure near a streetlight"
+      )
+    });
+  }
+
+  return filled;
+}
+
+function safeJsonParse(content: string): unknown {
+  const trimmed = content.trim();
+  const withoutFence = trimmed
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "");
+
+  try {
+    return JSON.parse(withoutFence);
+  } catch {
+    const start = withoutFence.indexOf("{");
+    const end = withoutFence.lastIndexOf("}");
+
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error("Model returned non-JSON output.");
+    }
+
+    return JSON.parse(withoutFence.slice(start, end + 1));
+  }
+}
+
+async function generateSceneImages(
+  openai: OpenAI,
+  scenes: StoryScene[],
+  imageModel: string
+): Promise<StoryScene[]> {
+  const results = await Promise.all(
+    scenes.map(async (scene) => {
+      try {
+        const image = await openai.images.generate({
+          model: imageModel,
+          prompt: scene.image_prompt,
+          size: "1024x1024"
+        });
+
+        const output = image.data?.[0];
+
+        if (output?.b64_json) {
+          return { ...scene, image_url: `data:image/png;base64,${output.b64_json}` };
+        }
+
+        if (output?.url) {
+          return { ...scene, image_url: output.url };
+        }
+
+        return scene;
+      } catch {
+        return scene;
+      }
+    })
+  );
+
+  return results;
+}
+
+export function validateStoryPackage(
+  raw: unknown,
+  targetMinutes: number,
+  estimatedWordCount: number,
+  desiredSceneCount: number
+): StoryPackage {
+  const obj = (raw || {}) as Record<string, unknown>;
+
+  const fullStory = cleanText(obj.full_story_script);
+  const narration = cleanText(obj.narration_script, fullStory);
+  const title = cleanText(obj.video_title, "Anonymous Confession from the Dark");
+  const summary = cleanText(obj.story_summary, "A confession-style suspense story.");
+  const description = cleanText(
+    obj.youtube_description,
+    "An anonymous confession that spirals into a suspenseful mystery."
+  );
+
+  if (!fullStory) {
+    throw new Error("Generated package did not include a full story script.");
+  }
+
+  const scenes = normalizeScenes(obj.scenes, desiredSceneCount, fullStory);
+
+  if (scenes.length < 3 || scenes.length > 7) {
+    throw new Error("Generated scenes are outside the required 3-7 range.");
+  }
+
+  return {
+    project_slug: createSlug(title) || `story-${Date.now()}`,
+    video_title: title,
+    target_minutes: targetMinutes,
+    estimated_word_count: estimatedWordCount,
+    story_summary: summary,
+    full_story_script: fullStory,
+    narration_script: narration,
+    youtube_description: description,
+    youtube_tags: cleanTags(obj.youtube_tags),
+    scenes
+  };
+}
+
+export async function generateStoryPackage(input: StoryInput): Promise<StoryPackage> {
+  const openAiApiKey = process.env.OPENAI_API_KEY;
+
+  if (!openAiApiKey) {
+    throw new Error("Missing OPENAI_API_KEY environment variable.");
+  }
+
+  const targetMinutes = clamp(input.targetMinutes, 1, 180);
+  const estimatedWordCount = calculateTargetWordCount(targetMinutes, input.manualWordCount);
+  const desiredSceneCount = estimateSceneCount(targetMinutes, estimatedWordCount);
+
+  const openai = new OpenAI({ apiKey: openAiApiKey });
+  const storyModel = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
+  const prompt = buildStoryPrompt(input, estimatedWordCount, desiredSceneCount);
+
+  const completion = await openai.chat.completions.create({
+    model: storyModel,
+    temperature: 0.9,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an expert YouTube suspense/horror story writer and packaging assistant. Return strict JSON only."
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ]
+  });
+
+  const content = completion.choices[0]?.message?.content;
+
+  if (!content) {
+    throw new Error("OpenAI returned an empty story response.");
+  }
+
+  const raw = safeJsonParse(content);
+  const packageWithoutImages = validateStoryPackage(
+    raw,
+    targetMinutes,
+    estimatedWordCount,
+    desiredSceneCount
+  );
+
+  const scenesWithImages = await generateSceneImages(
+    openai,
+    packageWithoutImages.scenes,
+    imageModel
+  );
+
+  return {
+    ...packageWithoutImages,
+    scenes: scenesWithImages
+  };
+}
