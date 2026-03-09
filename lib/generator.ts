@@ -127,8 +127,15 @@ function safeJsonParse(content: string): unknown {
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 function toProviderErrorDetails(error: unknown, context: string): ProviderErrorDetails {
   const maybeError = error as {
+    details?: ProviderErrorDetails;
     message?: string;
     status?: number;
     code?: string;
@@ -142,6 +149,10 @@ function toProviderErrorDetails(error: unknown, context: string): ProviderErrorD
       param?: string;
     };
   };
+
+  if (maybeError.details) {
+    return maybeError.details;
+  }
 
   const status = typeof maybeError.status === "number" ? maybeError.status : undefined;
   const code =
@@ -194,6 +205,38 @@ function createDetailedError(error: unknown, context: string): Error {
   return wrapped;
 }
 
+async function withOpenAIRetry<T>(
+  operation: () => Promise<T>,
+  context: string,
+  maxAttempts = 3
+): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const details = toProviderErrorDetails(error, context);
+      const retryable = details.status === 429 || (typeof details.status === "number" && details.status >= 500);
+
+      if (!retryable || attempt === maxAttempts) {
+        throw createDetailedError(error, context);
+      }
+
+      const waitMs = Math.min(2000 * 2 ** (attempt - 1), 12000);
+      console.warn("[openai] retrying request", {
+        attempt,
+        wait_ms: waitMs,
+        ...details
+      });
+      await sleep(waitMs);
+    }
+  }
+
+  throw createDetailedError(lastError, context);
+}
+
 async function generateSceneImages(
   openai: OpenAI,
   scenes: StoryScene[],
@@ -201,14 +244,33 @@ async function generateSceneImages(
 ): Promise<{ scenes: StoryScene[]; warnings: ProviderErrorDetails[] }> {
   const warnings: ProviderErrorDetails[] = [];
   const results: StoryScene[] = [];
+  const delayFromEnv = Number(process.env.OPENAI_IMAGE_REQUEST_DELAY_MS);
+  const imageRequestDelayMs = Number.isFinite(delayFromEnv)
+    ? clamp(delayFromEnv, 0, 5000)
+    : 250;
+  let sawRateLimit = false;
 
-  for (const scene of scenes) {
+  for (let i = 0; i < scenes.length; i += 1) {
+    const scene = scenes[i];
+    if (imageRequestDelayMs > 0 && i > 0) {
+      await sleep(imageRequestDelayMs);
+    }
+
+    if (sawRateLimit) {
+      results.push(scene);
+      continue;
+    }
+
     try {
-      const image = await openai.images.generate({
-        model: imageModel,
-        prompt: scene.image_prompt,
-        size: "1024x1024"
-      });
+      const image = await withOpenAIRetry(
+        () =>
+          openai.images.generate({
+            model: imageModel,
+            prompt: scene.image_prompt,
+            size: "1024x1024"
+          }),
+        `image_generation_scene_${scene.scene_number}`
+      );
 
       const output = image.data?.[0];
 
@@ -227,6 +289,9 @@ async function generateSceneImages(
       const details = toProviderErrorDetails(error, `image_generation_scene_${scene.scene_number}`);
       warnings.push(details);
       results.push(scene);
+      if (details.status === 429) {
+        sawRateLimit = true;
+      }
       console.error("[generateSceneImages] scene image generation failed", {
         scene_number: scene.scene_number,
         ...details
@@ -304,24 +369,28 @@ export async function generateStoryPackage(input: StoryInput): Promise<StoryPack
   let completion: Awaited<ReturnType<typeof openai.chat.completions.create>>;
 
   try {
-    completion = await openai.chat.completions.create({
-      model: storyModel,
-      temperature: 0.9,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an expert YouTube suspense/horror story writer and packaging assistant. Return strict JSON only."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
-    });
+    completion = await withOpenAIRetry(
+      () =>
+        openai.chat.completions.create({
+          model: storyModel,
+          temperature: 0.9,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are an expert YouTube suspense/horror story writer and packaging assistant. Return strict JSON only."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ]
+        }),
+      "story_generation"
+    );
   } catch (error) {
-    throw createDetailedError(error, "story_generation");
+    throw error;
   }
 
   const content = completion.choices[0]?.message?.content;

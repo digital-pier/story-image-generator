@@ -52,6 +52,7 @@ Set your keys:
 OPENAI_API_KEY=your_openai_key_here
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_IMAGE_MODEL=gpt-image-1
+OPENAI_IMAGE_REQUEST_DELAY_MS=250
 ```
 
 ## Local Run
@@ -78,6 +79,7 @@ npm run start
    - `OPENAI_API_KEY`
    - `OPENAI_MODEL` (optional)
    - `OPENAI_IMAGE_MODEL` (optional)
+   - `OPENAI_IMAGE_REQUEST_DELAY_MS` (optional, default `250`)
    - `NODE_ENV=production`
 4. Install dependencies on server:
    ```bash
