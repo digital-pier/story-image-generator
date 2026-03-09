@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { buildStoryPrompt } from "./prompts";
-import { StoryInput, StoryPackage, StoryScene } from "./types";
+import { ProviderErrorDetails, StoryInput, StoryPackage, StoryScene } from "./types";
 import { calculateTargetWordCount, clamp, estimateSceneCount } from "./wordcount";
 
 function createSlug(value: string): string {
@@ -127,38 +127,114 @@ function safeJsonParse(content: string): unknown {
   }
 }
 
+function toProviderErrorDetails(error: unknown, context: string): ProviderErrorDetails {
+  const maybeError = error as {
+    message?: string;
+    status?: number;
+    code?: string;
+    type?: string;
+    param?: string;
+    request_id?: string;
+    error?: {
+      message?: string;
+      code?: string;
+      type?: string;
+      param?: string;
+    };
+  };
+
+  const status = typeof maybeError.status === "number" ? maybeError.status : undefined;
+  const code =
+    typeof maybeError.code === "string"
+      ? maybeError.code
+      : typeof maybeError.error?.code === "string"
+        ? maybeError.error.code
+        : undefined;
+  const type =
+    typeof maybeError.type === "string"
+      ? maybeError.type
+      : typeof maybeError.error?.type === "string"
+        ? maybeError.error.type
+        : undefined;
+  const param =
+    typeof maybeError.param === "string"
+      ? maybeError.param
+      : typeof maybeError.error?.param === "string"
+        ? maybeError.error.param
+        : undefined;
+  const message =
+    cleanText(maybeError.error?.message) ||
+    cleanText(maybeError.message) ||
+    "An unknown OpenAI error occurred.";
+
+  const retryable = status === 429 || (typeof status === "number" && status >= 500);
+
+  return {
+    provider: "openai",
+    context,
+    message,
+    status,
+    code,
+    type,
+    param,
+    request_id: cleanText(maybeError.request_id) || undefined,
+    retryable
+  };
+}
+
+function createDetailedError(error: unknown, context: string): Error {
+  const details = toProviderErrorDetails(error, context);
+  const wrapped = new Error(details.message) as Error & {
+    status?: number;
+    details?: ProviderErrorDetails;
+  };
+
+  wrapped.status = details.status;
+  wrapped.details = details;
+  return wrapped;
+}
+
 async function generateSceneImages(
   openai: OpenAI,
   scenes: StoryScene[],
   imageModel: string
-): Promise<StoryScene[]> {
-  const results = await Promise.all(
-    scenes.map(async (scene) => {
-      try {
-        const image = await openai.images.generate({
-          model: imageModel,
-          prompt: scene.image_prompt,
-          size: "1024x1024"
-        });
+): Promise<{ scenes: StoryScene[]; warnings: ProviderErrorDetails[] }> {
+  const warnings: ProviderErrorDetails[] = [];
+  const results: StoryScene[] = [];
 
-        const output = image.data?.[0];
+  for (const scene of scenes) {
+    try {
+      const image = await openai.images.generate({
+        model: imageModel,
+        prompt: scene.image_prompt,
+        size: "1024x1024"
+      });
 
-        if (output?.b64_json) {
-          return { ...scene, image_url: `data:image/png;base64,${output.b64_json}` };
-        }
+      const output = image.data?.[0];
 
-        if (output?.url) {
-          return { ...scene, image_url: output.url };
-        }
-
-        return scene;
-      } catch {
-        return scene;
+      if (output?.b64_json) {
+        results.push({ ...scene, image_url: `data:image/png;base64,${output.b64_json}` });
+        continue;
       }
-    })
-  );
 
-  return results;
+      if (output?.url) {
+        results.push({ ...scene, image_url: output.url });
+        continue;
+      }
+
+      results.push(scene);
+    } catch (error) {
+      const details = toProviderErrorDetails(error, `image_generation_scene_${scene.scene_number}`);
+      warnings.push(details);
+      results.push(scene);
+      console.error("[generateSceneImages] scene image generation failed", {
+        scene_number: scene.scene_number,
+        ...details
+      });
+    }
+  }
+
+  return { scenes: results, warnings };
 }
 
 export function validateStoryPackage(
@@ -218,22 +294,28 @@ export async function generateStoryPackage(input: StoryInput): Promise<StoryPack
   const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-1";
   const prompt = buildStoryPrompt(input, estimatedWordCount, desiredSceneCount);
 
-  const completion = await openai.chat.completions.create({
-    model: storyModel,
-    temperature: 0.9,
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are an expert YouTube suspense/horror story writer and packaging assistant. Return strict JSON only."
-      },
-      {
-        role: "user",
-        content: prompt
-      }
-    ]
-  });
+  let completion: Awaited<ReturnType<typeof openai.chat.completions.create>>;
+
+  try {
+    completion = await openai.chat.completions.create({
+      model: storyModel,
+      temperature: 0.9,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an expert YouTube suspense/horror story writer and packaging assistant. Return strict JSON only."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    });
+  } catch (error) {
+    throw createDetailedError(error, "story_generation");
+  }
 
   const content = completion.choices[0]?.message?.content;
 
@@ -249,7 +331,7 @@ export async function generateStoryPackage(input: StoryInput): Promise<StoryPack
     desiredSceneCount
   );
 
-  const scenesWithImages = await generateSceneImages(
+  const { scenes, warnings } = await generateSceneImages(
     openai,
     packageWithoutImages.scenes,
     imageModel
@@ -257,6 +339,7 @@ export async function generateStoryPackage(input: StoryInput): Promise<StoryPack
 
   return {
     ...packageWithoutImages,
-    scenes: scenesWithImages
+    scenes,
+    warnings: warnings.length ? warnings : undefined
   };
 }

@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import OutputSection from "@/components/OutputSection";
 import SceneCard from "@/components/SceneCard";
-import { StoryPackage } from "@/lib/types";
+import { ProviderErrorDetails, StoryPackage } from "@/lib/types";
 
 type FormState = {
   premise: string;
@@ -40,14 +40,6 @@ const endingTypeOptions = [
   "Open-ended warning"
 ];
 
-const titleSeedOptions = [
-  "I Should Never Have Opened It",
-  "The Voice Note Had My Name",
-  "What I Found in the Basement",
-  "There Was Someone in the Hallway",
-  "The Door That Wasn't There Yesterday"
-];
-
 const initialForm: FormState = {
   premise: "",
   setting: "",
@@ -76,6 +68,7 @@ export default function StoryForm() {
   const [result, setResult] = useState<StoryPackage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<ProviderErrorDetails | null>(null);
 
   const estimatedWords = useMemo(() => {
     if (form.manualWordCount.trim()) {
@@ -91,6 +84,7 @@ export default function StoryForm() {
     event.preventDefault();
     setIsLoading(true);
     setError(null);
+    setErrorDetails(null);
 
     try {
       const response = await fetch("/api/generate", {
@@ -113,12 +107,17 @@ export default function StoryForm() {
       const payload = await response.json();
 
       if (!response.ok) {
-        throw new Error(payload.error || "Failed to generate story package.");
+        setError(payload.error || "Failed to generate story package.");
+        setErrorDetails((payload.details as ProviderErrorDetails | undefined) || null);
+        setResult(null);
+        return;
       }
 
       setResult(payload as StoryPackage);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error occurred.");
+      setErrorDetails(null);
+      setResult(null);
     } finally {
       setIsLoading(false);
     }
@@ -193,10 +192,9 @@ export default function StoryForm() {
             options={endingTypeOptions}
             onChange={(value) => setForm((p) => ({ ...p, endingType: value }))}
           />
-          <SelectInput
+          <Input
             label="Title idea"
             value={form.titleSeed}
-            options={titleSeedOptions}
             onChange={(value) => setForm((p) => ({ ...p, titleSeed: value }))}
           />
           <Input
@@ -232,13 +230,27 @@ export default function StoryForm() {
 
         {error && (
           <div className="rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200">
-            {error}
+            <p className="font-medium">{error}</p>
+            {errorDetails && (
+              <pre className="mt-2 overflow-auto whitespace-pre-wrap rounded-md border border-rose-300/30 bg-black/30 p-2 text-xs text-rose-100">
+                {JSON.stringify(errorDetails, null, 2)}
+              </pre>
+            )}
           </div>
         )}
       </form>
 
       {result && (
         <section className="mt-8 space-y-4">
+          {result.warnings && result.warnings.length > 0 && (
+            <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+              <p className="mb-2 font-medium">Generation warnings ({result.warnings.length})</p>
+              <pre className="overflow-auto whitespace-pre-wrap rounded-md border border-amber-300/30 bg-black/30 p-2 text-xs">
+                {JSON.stringify(result.warnings, null, 2)}
+              </pre>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <button
               type="button"

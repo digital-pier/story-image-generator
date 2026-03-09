@@ -18,6 +18,18 @@ export interface StoryScene {
   image_url?: string;
 }
 
+export interface ProviderErrorDetails {
+  provider: "openai" | "app";
+  context: string;
+  message: string;
+  status?: number;
+  code?: string;
+  type?: string;
+  param?: string;
+  request_id?: string;
+  retryable?: boolean;
+}
+
 export interface StoryPackage {
   project_slug: string;
   video_title: string;
@@ -29,4 +41,5 @@ export interface StoryPackage {
   youtube_description: string;
   youtube_tags: string[];
   scenes: StoryScene[];
+  warnings?: ProviderErrorDetails[];
 }

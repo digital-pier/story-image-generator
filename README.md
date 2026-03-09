@@ -8,6 +8,7 @@ Production-ready Next.js app for generating full YouTube suspense/horror confess
 - API route (`app/api/generate/route.ts`) running on Node runtime
 - Story package generation via OpenAI API
 - Scene image generation via OpenAI Images API
+- Structured API error diagnostics (status/code/type/request_id/context) shown in UI
 - Inputs for premise, style controls, duration, and manual word-count override
 - Automatic word target formula: `targetMinutes * 145` (130-160 WPM compatible)
 - Outputs:

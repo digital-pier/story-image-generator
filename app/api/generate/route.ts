@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateStoryPackage } from "@/lib/generator";
-import { StoryInput } from "@/lib/types";
+import { ProviderErrorDetails, StoryInput } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -15,16 +15,34 @@ type GeneratePayload = {
   manualWordCount?: number;
 };
 
+type DetailedError = Error & {
+  status?: number;
+  details?: ProviderErrorDetails;
+};
+
+function badRequest(message: string): DetailedError {
+  const error = new Error(message) as DetailedError;
+  error.status = 400;
+  error.details = {
+    provider: "app",
+    context: "request_validation",
+    message,
+    status: 400,
+    retryable: false
+  };
+  return error;
+}
+
 function parseInput(payload: GeneratePayload): StoryInput {
   const premise = payload.premise?.trim();
   const targetMinutes = Number(payload.targetMinutes);
 
   if (!premise) {
-    throw new Error("Story premise is required.");
+    throw badRequest("Story premise is required.");
   }
 
   if (!Number.isFinite(targetMinutes) || targetMinutes <= 0) {
-    throw new Error("Target video length (minutes) must be greater than 0.");
+    throw badRequest("Target video length (minutes) must be greater than 0.");
   }
 
   const maybeWordCount = payload.manualWordCount;
@@ -45,14 +63,67 @@ function parseInput(payload: GeneratePayload): StoryInput {
   };
 }
 
+function toErrorDetails(error: unknown): ProviderErrorDetails {
+  const maybeError = error as DetailedError;
+
+  if (maybeError.details) {
+    return maybeError.details;
+  }
+
+  const message = maybeError.message || "Failed to generate package.";
+  const status = typeof maybeError.status === "number" ? maybeError.status : 500;
+
+  return {
+    provider: "app",
+    context: "api_generate",
+    message,
+    status,
+    retryable: status >= 500
+  };
+}
+
 export async function POST(request: NextRequest) {
+  const start = Date.now();
+
   try {
     const body = (await request.json()) as GeneratePayload;
     const input = parseInput(body);
+
+    console.info("[api/generate] request", {
+      premise_length: input.premise.length,
+      target_minutes: input.targetMinutes,
+      has_setting: Boolean(input.setting),
+      has_tone: Boolean(input.tone),
+      has_intensity: Boolean(input.intensity),
+      has_ending_type: Boolean(input.endingType),
+      has_title_seed: Boolean(input.titleSeed),
+      has_manual_word_count: Boolean(input.manualWordCount)
+    });
+
     const storyPackage = await generateStoryPackage(input);
+
+    console.info("[api/generate] success", {
+      duration_ms: Date.now() - start,
+      project_slug: storyPackage.project_slug,
+      warning_count: storyPackage.warnings?.length || 0
+    });
+
     return NextResponse.json(storyPackage, { status: 200 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to generate package.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const details = toErrorDetails(error);
+    const status = typeof details.status === "number" ? details.status : 500;
+
+    console.error("[api/generate] failed", {
+      duration_ms: Date.now() - start,
+      ...details
+    });
+
+    return NextResponse.json(
+      {
+        error: details.message,
+        details
+      },
+      { status }
+    );
   }
 }
