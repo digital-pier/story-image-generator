@@ -28,6 +28,7 @@ export interface ProviderErrorDetails {
   param?: string;
   request_id?: string;
   retryable?: boolean;
+  api_key_preview?: string;
 }
 
 export interface StoryPackage {

@@ -20,6 +20,11 @@ type DetailedError = Error & {
   details?: ProviderErrorDetails;
 };
 
+function getOpenAIKeyPreview(): string {
+  const key = process.env.OPENAI_API_KEY;
+  return key ? `${key.slice(0, 7)}...` : "missing";
+}
+
 function badRequest(message: string): DetailedError {
   const error = new Error(message) as DetailedError;
   error.status = 400;
@@ -111,16 +116,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(storyPackage, { status: 200 });
   } catch (error) {
     const details = toErrorDetails(error);
+    const detailsWithKeyPreview: ProviderErrorDetails = {
+      ...details,
+      api_key_preview: getOpenAIKeyPreview()
+    };
     const status = typeof details.status === "number" ? details.status : 500;
     const maybeError = error as { message?: string; stack?: string };
 
     console.error("[api/generate] failed", {
       duration_ms: Date.now() - start,
-      ...details
+      ...detailsWithKeyPreview
     });
     console.error("[api/generate] explicit error details", {
       status,
-      details_json: JSON.stringify(details),
+      details_json: JSON.stringify(detailsWithKeyPreview),
       raw_message: maybeError.message,
       raw_stack: maybeError.stack
     });
@@ -128,7 +137,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: details.message,
-        details
+        details: detailsWithKeyPreview
       },
       { status }
     );
