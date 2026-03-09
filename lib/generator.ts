@@ -281,6 +281,13 @@ export function validateStoryPackage(
 export async function generateStoryPackage(input: StoryInput): Promise<StoryPackage> {
   const openAiApiKey = process.env.OPENAI_API_KEY;
 
+  console.log(
+    "OPENAI KEY:",
+    process.env.OPENAI_API_KEY
+      ? `${process.env.OPENAI_API_KEY.slice(0, 7)}...${process.env.OPENAI_API_KEY.slice(-4)}`
+      : "missing"
+  );
+
   if (!openAiApiKey) {
     throw new Error("Missing OPENAI_API_KEY environment variable.");
   }
