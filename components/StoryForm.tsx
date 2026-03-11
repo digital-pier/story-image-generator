@@ -19,6 +19,16 @@ const initialForm: FormState = {
   targetMinutes: "10"
 };
 
+type KeyCheckResult = {
+  ok: boolean;
+  message: string;
+  key_preview: string;
+  model: string;
+  auth_ok: boolean;
+  generation_ok: boolean;
+  details?: ProviderErrorDetails;
+};
+
 function downloadBlob(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -35,8 +45,10 @@ export default function StoryForm() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [result, setResult] = useState<StoryPackage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTestingKey, setIsTestingKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<ProviderErrorDetails | null>(null);
+  const [keyCheck, setKeyCheck] = useState<KeyCheckResult | null>(null);
 
   const estimatedWords = useMemo(() => {
     const minutes = Number(form.targetMinutes);
@@ -89,6 +101,34 @@ export default function StoryForm() {
       setResult(null);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleKeyCheck() {
+    setIsTestingKey(true);
+    setKeyCheck(null);
+
+    try {
+      const response = await fetch("/api/key-check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+
+      const payload = (await response.json()) as KeyCheckResult;
+      setKeyCheck(payload);
+    } catch (err) {
+      setKeyCheck({
+        ok: false,
+        message: err instanceof Error ? err.message : "Failed to run API key check.",
+        key_preview: "unknown",
+        model: "unknown",
+        auth_ok: false,
+        generation_ok: false
+      });
+    } finally {
+      setIsTestingKey(false);
     }
   }
 
@@ -159,14 +199,45 @@ export default function StoryForm() {
             Estimated target words (default formula: <code>minutes * 145</code>):{" "}
             <span className="font-semibold text-cyanGlow">{Number.isFinite(estimatedWords) ? estimatedWords : 0}</span>
           </p>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="rounded-lg bg-gradient-to-r from-cyanGlow to-emerald-300 px-5 py-2 text-sm font-semibold text-slate-900 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isLoading ? "Generating package..." : "Generate"}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={handleKeyCheck}
+              disabled={isTestingKey}
+              className="rounded-lg border border-line bg-panel px-5 py-2 text-sm font-semibold text-slate-100 transition hover:border-cyanGlow disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isTestingKey ? "Testing API key..." : "Test API Key"}
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="rounded-lg bg-gradient-to-r from-cyanGlow to-emerald-300 px-5 py-2 text-sm font-semibold text-slate-900 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isLoading ? "Generating package..." : "Generate"}
+            </button>
+          </div>
         </div>
+
+        {keyCheck && (
+          <div
+            className={`rounded-lg border p-3 text-sm ${
+              keyCheck.ok
+                ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+                : "border-amber-400/30 bg-amber-400/10 text-amber-100"
+            }`}
+          >
+            <p className="font-medium">{keyCheck.message}</p>
+            <p className="mt-1 text-xs opacity-90">
+              key: <code>{keyCheck.key_preview}</code> | model: <code>{keyCheck.model}</code> | auth:{" "}
+              <code>{String(keyCheck.auth_ok)}</code> | generation: <code>{String(keyCheck.generation_ok)}</code>
+            </p>
+            {keyCheck.details && (
+              <pre className="mt-2 overflow-auto whitespace-pre-wrap rounded-md border border-amber-300/30 bg-black/30 p-2 text-xs text-amber-50">
+                {JSON.stringify(keyCheck.details, null, 2)}
+              </pre>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="rounded-lg border border-rose-400/30 bg-rose-400/10 p-3 text-sm text-rose-200">
