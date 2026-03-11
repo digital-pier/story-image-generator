@@ -133,6 +133,18 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
+function isInsufficientQuota(details: {
+  code?: string;
+  type?: string;
+  message?: string;
+}): boolean {
+  return (
+    details.code === "insufficient_quota" ||
+    details.type === "insufficient_quota" ||
+    /exceeded your current quota/i.test(details.message || "")
+  );
+}
+
 function toProviderErrorDetails(error: unknown, context: string): ProviderErrorDetails {
   const maybeError = error as {
     details?: ProviderErrorDetails;
@@ -178,7 +190,9 @@ function toProviderErrorDetails(error: unknown, context: string): ProviderErrorD
     cleanText(maybeError.message) ||
     "An unknown OpenAI error occurred.";
 
-  const retryable = status === 429 || (typeof status === "number" && status >= 500);
+  const retryable =
+    !isInsufficientQuota({ code, type, message }) &&
+    (status === 429 || (typeof status === "number" && status >= 500));
 
   return {
     provider: "openai",
@@ -218,7 +232,9 @@ async function withOpenAIRetry<T>(
     } catch (error) {
       lastError = error;
       const details = toProviderErrorDetails(error, context);
-      const retryable = details.status === 429 || (typeof details.status === "number" && details.status >= 500);
+      const retryable =
+        !isInsufficientQuota(details) &&
+        (details.status === 429 || (typeof details.status === "number" && details.status >= 500));
 
       if (!retryable || attempt === maxAttempts) {
         throw createDetailedError(error, context);
