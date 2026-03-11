@@ -35,11 +35,7 @@ Generation targets:
 
 User inputs:
 - premise: ${input.premise}
-- setting/location: ${input.setting || "Not specified"}
-- tone: ${input.tone || "Not specified"}
-- intensity: ${input.intensity || "Not specified"}
-- ending type: ${input.endingType || "Not specified"}
-- title seed: ${input.titleSeed || "Not specified"}
+- preferred title: ${input.title || "Not specified"}
 - target minutes: ${input.targetMinutes}
 
 ${buildImagePromptGeneratorPrompt()}

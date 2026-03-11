@@ -6,13 +6,8 @@ export const runtime = "nodejs";
 
 type GeneratePayload = {
   premise?: string;
-  setting?: string;
-  tone?: string;
-  intensity?: string;
-  endingType?: string;
-  titleSeed?: string;
+  title?: string;
   targetMinutes?: number;
-  manualWordCount?: number;
 };
 
 type DetailedError = Error & {
@@ -40,6 +35,7 @@ function badRequest(message: string): DetailedError {
 
 function parseInput(payload: GeneratePayload): StoryInput {
   const premise = payload.premise?.trim();
+  const title = payload.title?.trim();
   const targetMinutes = Number(payload.targetMinutes);
 
   if (!premise) {
@@ -50,21 +46,10 @@ function parseInput(payload: GeneratePayload): StoryInput {
     throw badRequest("Target video length (minutes) must be greater than 0.");
   }
 
-  const maybeWordCount = payload.manualWordCount;
-  const manualWordCount =
-    maybeWordCount !== undefined && maybeWordCount !== null && Number(maybeWordCount) > 0
-      ? Number(maybeWordCount)
-      : undefined;
-
   return {
     premise,
-    setting: payload.setting?.trim() || undefined,
-    tone: payload.tone?.trim() || undefined,
-    intensity: payload.intensity?.trim() || undefined,
-    endingType: payload.endingType?.trim() || undefined,
-    titleSeed: payload.titleSeed?.trim() || undefined,
-    targetMinutes,
-    manualWordCount
+    title: title || undefined,
+    targetMinutes
   };
 }
 
@@ -97,12 +82,7 @@ export async function POST(request: NextRequest) {
     console.info("[api/generate] request", {
       premise_length: input.premise.length,
       target_minutes: input.targetMinutes,
-      has_setting: Boolean(input.setting),
-      has_tone: Boolean(input.tone),
-      has_intensity: Boolean(input.intensity),
-      has_ending_type: Boolean(input.endingType),
-      has_title_seed: Boolean(input.titleSeed),
-      has_manual_word_count: Boolean(input.manualWordCount)
+      has_title: Boolean(input.title)
     });
 
     const storyPackage = await generateStoryPackage(input);

@@ -358,7 +358,7 @@ export async function generateStoryPackage(input: StoryInput): Promise<StoryPack
   }
 
   const targetMinutes = clamp(input.targetMinutes, 1, 180);
-  const estimatedWordCount = calculateTargetWordCount(targetMinutes, input.manualWordCount);
+  const estimatedWordCount = calculateTargetWordCount(targetMinutes);
   const desiredSceneCount = estimateSceneCount(targetMinutes, estimatedWordCount);
 
   const openai = new OpenAI({ apiKey: openAiApiKey });

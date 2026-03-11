@@ -2,14 +2,7 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-export function calculateTargetWordCount(
-  targetMinutes: number,
-  manualWordCount?: number
-): number {
-  if (manualWordCount && manualWordCount > 0) {
-    return Math.round(manualWordCount);
-  }
-
+export function calculateTargetWordCount(targetMinutes: number): number {
   return Math.round(targetMinutes * 145);
 }
 

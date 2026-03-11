@@ -7,48 +7,16 @@ import { ProviderErrorDetails, StoryPackage } from "@/lib/types";
 
 type FormState = {
   premise: string;
-  setting: string;
-  tone: string;
-  intensity: string;
-  endingType: string;
-  titleSeed: string;
+  title: string;
   targetMinutes: string;
-  manualWordCount: string;
 };
 
-const toneOptions = [
-  "Dark and unsettling",
-  "Slow-burn suspense",
-  "Paranoid and claustrophobic",
-  "Melancholic mystery",
-  "Fast-paced thriller"
-];
-
-const intensityOptions = [
-  "Low simmer",
-  "Moderate tension",
-  "High tension",
-  "Relentless suspense",
-  "Maximum dread"
-];
-
-const endingTypeOptions = [
-  "Twist reveal",
-  "Ambiguous cliffhanger",
-  "Quiet unsettling ending",
-  "Karmic consequence",
-  "Open-ended warning"
-];
+const targetLengthOptions = ["3", "5", "8", "10", "12", "15", "20"];
 
 const initialForm: FormState = {
   premise: "",
-  setting: "",
-  tone: "",
-  intensity: "",
-  endingType: "",
-  titleSeed: "",
-  targetMinutes: "10",
-  manualWordCount: ""
+  title: "",
+  targetMinutes: "10"
 };
 
 function downloadBlob(filename: string, content: string, mimeType: string) {
@@ -71,14 +39,10 @@ export default function StoryForm() {
   const [errorDetails, setErrorDetails] = useState<ProviderErrorDetails | null>(null);
 
   const estimatedWords = useMemo(() => {
-    if (form.manualWordCount.trim()) {
-      return Number(form.manualWordCount);
-    }
-
     const minutes = Number(form.targetMinutes);
     if (!Number.isFinite(minutes) || minutes <= 0) return 0;
     return Math.round(minutes * 145);
-  }, [form.manualWordCount, form.targetMinutes]);
+  }, [form.targetMinutes]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,13 +58,8 @@ export default function StoryForm() {
         },
         body: JSON.stringify({
           premise: form.premise,
-          setting: form.setting,
-          tone: form.tone,
-          intensity: form.intensity,
-          endingType: form.endingType,
-          titleSeed: form.titleSeed,
-          targetMinutes: Number(form.targetMinutes),
-          manualWordCount: form.manualWordCount ? Number(form.manualWordCount) : undefined
+          title: form.title,
+          targetMinutes: Number(form.targetMinutes)
         })
       });
 
@@ -178,49 +137,20 @@ export default function StoryForm() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div>
           <Input
-            label="Setting / location"
-            value={form.setting}
-            onChange={(value) => setForm((p) => ({ ...p, setting: value }))}
+            label="Title"
+            value={form.title}
+            onChange={(value) => setForm((p) => ({ ...p, title: value }))}
           />
+        </div>
+
+        <div>
           <SelectInput
-            label="Tone"
-            value={form.tone}
-            options={toneOptions}
-            onChange={(value) => setForm((p) => ({ ...p, tone: value }))}
-          />
-          <SelectInput
-            label="Intensity"
-            value={form.intensity}
-            options={intensityOptions}
-            onChange={(value) => setForm((p) => ({ ...p, intensity: value }))}
-          />
-          <SelectInput
-            label="Ending type"
-            value={form.endingType}
-            options={endingTypeOptions}
-            onChange={(value) => setForm((p) => ({ ...p, endingType: value }))}
-          />
-          <Input
-            label="Title idea"
-            value={form.titleSeed}
-            onChange={(value) => setForm((p) => ({ ...p, titleSeed: value }))}
-          />
-          <Input
             label="Target video length (minutes) *"
-            type="number"
-            min="1"
-            required
             value={form.targetMinutes}
+            options={targetLengthOptions}
             onChange={(value) => setForm((p) => ({ ...p, targetMinutes: value }))}
-          />
-          <Input
-            label="Manual word count override"
-            type="number"
-            min="100"
-            value={form.manualWordCount}
-            onChange={(value) => setForm((p) => ({ ...p, manualWordCount: value }))}
           />
         </div>
 
@@ -311,12 +241,11 @@ interface InputProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  type?: "text" | "number";
+  type?: "text";
   required?: boolean;
-  min?: string;
 }
 
-function Input({ label, value, onChange, type = "text", required, min }: InputProps) {
+function Input({ label, value, onChange, type = "text", required }: InputProps) {
   return (
     <label className="block">
       <span className="mb-1 block text-sm text-slate-200">{label}</span>
@@ -324,7 +253,6 @@ function Input({ label, value, onChange, type = "text", required, min }: InputPr
         type={type}
         value={value}
         required={required}
-        min={min}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg border border-line bg-ink/70 px-3 py-2 text-sm text-white outline-none ring-cyanGlow/30 transition focus:ring"
       />
@@ -348,10 +276,9 @@ function SelectInput({ label, value, options, onChange }: SelectInputProps) {
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg border border-line bg-ink/70 px-3 py-2 text-sm text-white outline-none ring-cyanGlow/30 transition focus:ring"
       >
-        <option value="">No preference</option>
         {options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {option} minutes
           </option>
         ))}
       </select>

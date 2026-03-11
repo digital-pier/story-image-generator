@@ -1,12 +1,7 @@
 export interface StoryInput {
   premise: string;
-  setting?: string;
-  tone?: string;
-  intensity?: string;
-  endingType?: string;
-  titleSeed?: string;
+  title?: string;
   targetMinutes: number;
-  manualWordCount?: number;
 }
 
 export interface StoryScene {
