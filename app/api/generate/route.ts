@@ -17,7 +17,7 @@ type DetailedError = Error & {
 
 function getOpenAIKeyPreview(): string {
   const key = process.env.OPENAI_API_KEY;
-  return key ? `${key.slice(0, 7)}...` : "missing";
+  return key ? `${key.slice(0, 20)}...` : "missing";
 }
 
 function badRequest(message: string): DetailedError {

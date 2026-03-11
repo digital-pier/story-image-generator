@@ -349,7 +349,7 @@ export async function generateStoryPackage(input: StoryInput): Promise<StoryPack
   console.log(
     "OPENAI KEY:",
     process.env.OPENAI_API_KEY
-      ? `${process.env.OPENAI_API_KEY.slice(0, 7)}...${process.env.OPENAI_API_KEY.slice(-4)}`
+      ? `${process.env.OPENAI_API_KEY.slice(0, 20)}...`
       : "missing"
   );
 
